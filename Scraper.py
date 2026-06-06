@@ -8,56 +8,68 @@ response = requests.get(url)
 html = response.text
 
 
-
 soup = BeautifulSoup(html, "html.parser")
-labels={}
-score = soup.select_one('#genesis-content > article > div > div > div.row.row-1 > div.column.col-1 > span')
-labels['Score'] = score.get_text(strip=True)
+
+def get_text(soup, selector):
+    element = soup.select_one(selector)
+    return element.get_text(strip=True) if element else None
 
 
-title = soup.select_one('h1')
-labels['Name'] = title.get_text(strip=True)
+def table_to_dict(table):
+    data = {}
+
+    if not table:
+        return data
+
+    for row in table.select("tr"):
+        cells = row.select("td")
+
+        if len(cells) >= 2:
+            key = cells[0].get_text(strip=True).replace(":", "")
+            value = cells[1].get_text(strip=True)
+            data[key] = value
+
+    return data
 
 
-table_1 = soup.select_one("div.column.col-1 table.review-template-table")
+
+labels = {}
+
+labels["Score"] = get_text(
+    soup,
+    "#genesis-content article div.row.row-1 div.column.col-1 span"
+)
+
+labels["Name"] = get_text(soup, "h1")
+
+col1 = table_to_dict(
+    soup.select_one("div.column.col-1 table.review-template-table")
+)
+
+col2 = table_to_dict(
+    soup.select_one("div.column.col-2 table.review-template-table")
+)
+
+coffee_data = {
+    "name": labels.get("Name"),
+    "score": labels.get("Score"),
+    "roast_level": col1.get("Roast Level"),
+    "aroma": col2.get("Aroma"),
+    "structure": col2.get("Acidity/Structure"),
+    "body": col2.get("Body"),
+    "flavour": col2.get("Flavor"),
+    "aftertaste": col2.get("Aftertaste"),
+}
 
 
-col1 = {}
 
-for row in table_1.select("tr"):
-    cells = row.select("td")
-    key = cells[0].get_text(strip=True).replace(":", "")
-    value = cells[1].get_text(strip=True)
-    col1[key] = value
-
-
-table_2 = soup.select_one("div.column.col-2 table.review-template-table")
-
-col2 = {}
-
-for row in table_2.select("tr"):
-    cells = row.select("td")
-    key = cells[0].get_text(strip=True).replace(":", "")
-    value = cells[1].get_text(strip=True)
-    col2[key] = value
-
-
-roast_level = col1['Roast Level']
-name = labels['Name']
-score = labels['Score']
-aroma = col2['Aroma']
-structure = col2['Acidity/Structure']
-body = col2['Body']
-flavour = col2['Flavor']
-aftertaste = col2['Aftertaste']
-
-df = pl.DataFrame(data = {"Name": name, 'Roast Level': roast_level, 'Score': score, 'Aroma': aroma, 'Structure': structure, 'Body': body, 'Flavour': flavour, 'Aftertaste': aftertaste})
-df = df.with_columns([pl.col('Score').cast(pl.Int8), 
-                      pl.col('Aroma').cast(pl.Int8),
-                      pl.col('Structure').cast(pl.Int8),
-                      pl.col('Body').cast(pl.Int8),
-                      pl.col('Flavour').cast(pl.Int8),
-                      pl.col('Aftertaste').cast(pl.Int8)])
+df = pl.DataFrame(coffee_data)
+df = df.with_columns([pl.col('score').cast(pl.Int8), 
+                      pl.col('aroma').cast(pl.Int8),
+                      pl.col('structure').cast(pl.Int8),
+                      pl.col('body').cast(pl.Int8),
+                      pl.col('flavour').cast(pl.Int8),
+                      pl.col('aftertaste').cast(pl.Int8)])
 print(df)
 
 ###   Inputs:
