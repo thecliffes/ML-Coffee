@@ -1,6 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import polars as pl
+import time
 
 url = "https://www.coffeereview.com/review/"
 response = requests.get(url)
@@ -8,7 +9,7 @@ response = requests.get(url)
 html = response.text
 
 
-soup = BeautifulSoup(html, "html.parser")
+soup_mainpage = BeautifulSoup(html, "html.parser")
 
 def get_review(soup, selector):
     element = soup.select_one(selector)
@@ -66,16 +67,15 @@ def get_data(soup):
     }
     return coffee_data
 
-url = get_review(soup, "h2.review-title a")
-response = requests.get(url)
+
+url = get_review(soup_mainpage, f"#genesis-content > div:nth-child(5) > div > div.row.row-1 > div.column.col-2 > h2 > a")
+response = requests.get(url) 
 
 html = response.text
+soup_first_review = BeautifulSoup(html, "html.parser")
 
+coffee_data = get_data(soup_first_review)
 
-soup = BeautifulSoup(html, "html.parser")
-
-coffee_data = get_data(soup)
-print(coffee_data)
 df = pl.DataFrame(coffee_data)
 df = df.with_columns([pl.col('score').cast(pl.Int8), 
                       pl.col('aroma').cast(pl.Int8),
@@ -83,8 +83,37 @@ df = df.with_columns([pl.col('score').cast(pl.Int8),
                       pl.col('body').cast(pl.Int8),
                       pl.col('flavour').cast(pl.Int8),
                       pl.col('aftertaste').cast(pl.Int8)])
+
 print(df)
 
+for i in range(6, 25):
+    # ✅ Always search for links in the MAIN PAGE soup
+    url = get_review(soup_mainpage, f"#genesis-content > div:nth-child({i}) > div > div.row.row-1 > div.column.col-2 > h2 > a")
+    
+    if url is not None:
+        response = requests.get(url)
+        
+        # ✅ Parse the individual review page into its own soup
+        soup_review = BeautifulSoup(response.text, "html.parser")
+        
+        # ✅ Extract data from the review soup, not the listing soup
+        coffee_data = get_data(soup_review)
+
+        new_row = pl.DataFrame(coffee_data)
+        new_row = new_row.with_columns([pl.col('score').cast(pl.Int8), 
+                      pl.col('aroma').cast(pl.Int8),
+                      pl.col('structure').cast(pl.Int8),
+                      pl.col('body').cast(pl.Int8),
+                      pl.col('flavour').cast(pl.Int8),
+                      pl.col('aftertaste').cast(pl.Int8)])
+        
+        df = pl.concat([df, new_row])
+        print(i)
+        time.sleep(2)
+    else:
+        print(f"Could not find link for {i}, skipping...")
+
+print(df)
 ###   Inputs:
 #   Strength
 #   Roast Level
