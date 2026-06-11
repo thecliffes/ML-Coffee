@@ -77,10 +77,16 @@ for j in range(2, 452):
 
         time.sleep(2)
 
+    if all_rows:
+        pl.DataFrame(all_rows).with_columns([
+            pl.col(['score', 'aroma', 'structure', 'body', 'flavour', 'aftertaste']).cast(pl.Int8, strict=False)
+        ]).write_csv("coffee_data.csv")
+        print(f"  Saved {len(all_rows)} reviews to coffee_data.csv")
+
     url = f"https://www.coffeereview.com/review/page/{j}/"
 
 df = pl.DataFrame(all_rows).with_columns([
-    pl.col('score', 'aroma', 'structure', 'body', 'flavour', 'aftertaste').cast(pl.Int8)
+    pl.col(['score', 'aroma', 'structure', 'body', 'flavour', 'aftertaste']).cast(pl.Int8, strict=False)
 ])
 
 print(df)
