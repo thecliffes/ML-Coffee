@@ -4,14 +4,14 @@ A scraper + ML models for coffee review data from coffeereview.com.
 
 ## What it does
 
-Scrapes ~9,000 reviews and trains two models to predict which coffee bean matches a given set of tasting attributes (roast level, aroma, structure, body, flavour, aftertaste).
+Scrapes ~9,000 reviews and builds two content-based recommenders that return the most similar coffees to a given set of tasting attributes. Both models use weighted cosine similarity over feature vectors — they are recommenders, not classifiers.
 
 ## Files
 
-- `Scraper.py` - pulls review data from coffeereview.com and saves to CSV
-- `knn_model.ipynb` - KNN classifier using Euclidean distance
-- `cosine_model.ipynb` - cosine similarity recommender
-- `coffee_data.csv` - the scraped data (~9k rows)
+- `Scraper.py` — pulls review data from coffeereview.com and saves to CSV
+- `knn_model.ipynb` — cosine recommender using `NearestNeighbors`
+- `cosine_model.ipynb` — cosine recommender using `cosine_similarity` directly
+- `coffee_data.csv` — the scraped data (~9k rows)
 
 ## How to run
 
@@ -20,7 +20,7 @@ Scrapes ~9,000 reviews and trains two models to predict which coffee bean matche
 pip install requests beautifulsoup4 polars
 python Scraper.py
 ```
-Takes a while - there are 450 pages with a 2s delay between requests.
+Takes a while — there are 450 pages with a 2s delay between requests.
 
 **Models**:
 ```bash
@@ -31,43 +31,70 @@ jupyter notebook cosine_model.ipynb
 ```
 Run all cells top to bottom.
 
-## Models
+## Models (V5)
 
-### KNN (`knn_model.ipynb`)
+Both notebooks implement the same weighted cosine retrieval approach. The difference is implementation: `cosine_model.ipynb` uses `cosine_similarity` directly; `knn_model.ipynb` uses sklearn's `NearestNeighbors(metric='cosine')`.
 
-Uses K-Nearest Neighbours with Euclidean distance. K is chosen automatically by sweeping k=1–15 with 5-fold cross-validation and picking the best. Call `predict_coffee()` with tasting attributes to get a ranked shortlist.
-
-```python
-predict_coffee('Light', aroma=9, structure=9, body=9, flavour=10, aftertaste=9)
-```
-
-### Cosine Similarity (`cosine_model.ipynb`)
-
-Computes cosine similarity between the query and every training example, then ranks coffees by their mean similarity score. Call `recommend_coffee()` with the same attributes.
+### Usage
 
 ```python
-recommend_coffee('Light', aroma=9, structure=9, body=9, flavour=10, aftertaste=9)
+recommend_coffee(
+    'Light', aroma=9, structure=9, body=9, flavour=10, aftertaste=9,
+    process_method='Natural', variety='Geisha'
+)
 ```
+
+```
+Top 5 recommended coffees:
+  1. Panama Elida Natural Geisha             0.94
+  2. Ninety Plus Gesha Estates               0.91
+  3. ...
+```
+
+All parameters except `roast_level` and the tasting scores are optional — pass `None` or omit them and they default to `'Unknown'`.
+
+## Feature weights
+
+| Feature | Weight | Source |
+|:---|:---:|:---|
+| flavour | 2.0 | Tasting score |
+| aftertaste | 2.0 | Tasting score |
+| aroma | 1.5 | Tasting score |
+| process_method | 1.5 | Extracted from coffee name |
+| variety | 1.5 | Extracted from coffee name |
+| structure | 1.2 | Tasting score |
+| body | 1.0 | Tasting score |
+| score | 1.0 | Overall review score |
+| coffee_country | 1.0 | Extracted from coffee_origin |
+| agtron_whole | 0.8 | Roast measurement |
+| roast_level | 0.8 | Roast category |
+| coffee_region | 0.8 | Extracted from coffee_origin |
+
+Weights are applied after preprocessing (scaling/encoding) by multiplying each feature dimension. This biases cosine similarity toward flavour, aftertaste, aroma, process and variety — the dimensions that most define coffee character.
 
 ## Feature encoding
 
 | Feature | Encoding |
-|---|---|
-| `roast_level` | OrdinalEncoder (Light=0 → Dark=4) then StandardScaler |
-| `aroma`, `body`, `flavour`, `aftertaste` | SimpleImputer (median) then StandardScaler |
-| `structure` | Same as above — missing values imputed so you can pass `None` |
+|:---|:---|
+| `roast_level` | OrdinalEncoder (Light=0 → Dark=4), unknown → -1, then StandardScaler |
+| Numeric tasting scores | SimpleImputer (median) + StandardScaler |
+| `coffee_country`, `coffee_region`, `process_method`, `variety` | OneHotEncoder (min_frequency=10), unknown → ignored |
 
-Ordinal encoding preserves the natural ordering of roast levels, which matters for distance-based models. StandardScaler ensures no single feature dominates due to scale differences.
+`process_method` and `variety` are keyword-extracted from the coffee name. `coffee_country` and `coffee_region` are extracted from the `coffee_origin` field. Missing values are filled with `'Unknown'` rather than most-frequent imputation, which would make unrelated coffees look artificially similar.
 
-## Results
+## Evaluation
 
-Both models surface the right beans in the top-5 shortlist but exact-match accuracy is low (~0.3%). This is expected — many distinct coffees share identical integer scores, making them indistinguishable from tasting attributes alone. Top-N accuracy is the more meaningful metric for a recommender use case.
+Exact-match accuracy is not meaningful here — many coffees share identical tasting profiles. V5 uses recommender metrics evaluated on a held-out 20% split:
 
-The cosine model can return similarity scores of 1.0 for multiple coffees simultaneously, which means the query profile matches those beans exactly but the model cannot rank between them.
-
-Adding more discriminative features (origin, process method, cultivar) would improve separation between similarly-scored beans.
+| Metric | Description |
+|:---|:---|
+| Top-5 hit rate | True coffee appears in top 5 results |
+| Top-10 hit rate | True coffee appears in top 10 results |
+| MRR | Mean Reciprocal Rank |
+| NDCG@10 | Normalised Discounted Cumulative Gain at 10 |
 
 ## Notes
 
-- `structure` (acidity) is missing for a lot of reviews — espresso-only reviews don't include it. Both models impute with the median so you can pass `None` if you don't have it.
-- Scores are on a 1–10 scale per category; overall score is out of 100.
+- `structure` (acidity) is missing for many espresso-only reviews — imputed with median so you can pass `None`.
+- Scores are on a 1–10 scale per category; overall `score` is out of 100.
+- `roaster` and `roaster_location` were dropped in V5 — high-cardinality categoricals with thousands of unique values created sparse noise that degraded similarity in earlier versions.
