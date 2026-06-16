@@ -38,11 +38,13 @@ def get_data(soup):
     labels = {}
     labels["Score"] = get_text(soup, "#genesis-content article div.row.row-1 div.column.col-1 span")
     labels["Name"] = get_text(soup, "h1")
+    labels["Roaster"] = get_text(soup, "#genesis-content > article > div > div > div.row.row-1 > div.column.col-2 > p") 
     # col1 = roast info, col2 = tasting scores
     col1 = table_to_dict(soup.select_one("div.column.col-1 table.review-template-table"))
     col2 = table_to_dict(soup.select_one("div.column.col-2 table.review-template-table"))
     return {
         "name": labels.get("Name"),
+        "roaster": labels.get("Roaster"),
         "score": labels.get("Score"),
         "roast_level": col1.get("Roast Level"),
         "aroma": col2.get("Aroma"),
@@ -50,6 +52,11 @@ def get_data(soup):
         "body": col2.get("Body"),
         "flavour": col2.get("Flavor"),
         "aftertaste": col2.get("Aftertaste"),
+        "coffee_origin": col1.get("Coffee Origin"),
+        "roaster_location": col1.get("Roaster Location"),
+        "agtron": col1.get("Agtron"),
+        "cost": col1.get("Est. Price")
+
     }
 
 all_rows = []
