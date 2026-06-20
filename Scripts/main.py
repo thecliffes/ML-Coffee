@@ -1,6 +1,7 @@
 import streamlit as st
 import joblib
 import pandas as pd
+import html
 from sklearn.metrics.pairwise import cosine_similarity
 
 st.set_page_config(page_title="Coffee Recommender", page_icon="☕")
@@ -53,7 +54,7 @@ if selected:
         score = sims[i]
         st.markdown(
             f'<div class="coffee-card">'
-            f'<span>{rank}. {name}</span>'
+            f'<span>{rank}. {html.escape(name)}</span>'
             f'<span class="score">{score:.2f}</span>'
             f'</div>',
             unsafe_allow_html=True,
